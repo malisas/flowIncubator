@@ -6,6 +6,7 @@
 #' 
 #' @param gs a GatingSet object, properly gated data with annotation in its pData
 #' @param parentGate a \code{string} describing the gate upstream of the cytokine gates (eg. "CD4", "cd8+", etc...)
+#' @param parentGateMarker a \code{string} describing the marker which corresponds to parentGate
 #' @param cytokine a \code{vector} of \code{strings} describing the cytokine gates immediately downstream of parentGate, eg: "IL2", "IFNg"
 #' @param otherMarkers the remaining markers of the data
 #' @param markerMap named list of marker names to gate names, eg. list("CD4/IL2" = "IL2","CD4/IFNg" = "IFNg")
@@ -21,7 +22,10 @@
 #' @import data.table
 #' @import plyr
 #' @import Rtsne
-runTSNE <- function (gs, parentGate, cytokines, otherMarkers, markerMap, notRunMarkers = c(), swap = FALSE,
+#' TODO: the `cytokines` parameter is not actually required, just the markerMap.
+#' Also, this version of the function allows degreeFilter == 0, but requires the parentGate to be a marginal 1D gate which maps to a specific marker
+#' (due to the way getSingleCellExpression works)
+runTSNE <- function (gs, parentGate, parentGateMarker, cytokines, otherMarkers, markerMap, notRunMarkers = c(), swap = FALSE,
                      groupBy, degreeFilter = 0, seed = 999, theta = 0.9, ...) {
   
   if (is.null(markerMap)) stop ("required markerMap is missing ! STOPPING....")
@@ -42,8 +46,11 @@ runTSNE <- function (gs, parentGate, cytokines, otherMarkers, markerMap, notRunM
   cat("after grouping by '", groupBy, "', all groups will have at least", 
       nTcells, "cells.\n")
   pd[, {
+    # Sample from the total number of events
+    # in the parent population. 
     totalEvents <- sum(get(parentGate))
     gInd <- 1:totalEvents
+    # sample, without replacement, a vector of cell indices for the entire group, length totalEvents
     gInd <- sample.int(totalEvents, size = nTcells)
     gInd.logical <- rep(F, totalEvents)
     gInd.logical[gInd] <- T
@@ -59,16 +66,31 @@ runTSNE <- function (gs, parentGate, cytokines, otherMarkers, markerMap, notRunM
   cat("subsampling complete ! recomputing... \n")
   nodes <- getChildren(gs[[1]], parentGate, path = 2)
   for (node in nodes) recompute(gs, node)
+  
   cat("generating event masks \n")
-  
-  # res has all the fluorescence data
-  res <- getSingleCellExpression(gs, nodes, other.markers = c(otherMarkers, notRunMarkers), 
+
+  # Obtain the list of nodes of interest from the markerMap.
+  userNodes <- names(markerMap)
+  # Make sure they all exist as children of the parent node.
+  childNodeOptions <- c(nodes, getChildren(gs[[1]], parentGate, path = 1), getChildren(gs[[1]], parentGate, path = "full"), getChildren(gs[[1]], parentGate, path = "auto"))
+  for(userNode in userNodes) { stopifnot(userNode %in%  childNodeOptions) }
+  # For now we want to obtain the single cell fluorescence data for ALL cells that are members of the parentGate.
+  # We pass the parentGate argument to the nodes argument to ensure this happens.
+  # TODO: Figure out a method to get all cells w/o requiring parentGate to be a marginal 1D node with an associated marker
+  markerMap[[parentGate]] <- parentGateMarker
+  res <- getSingleCellExpression(gs, nodes = c(userNodes, parentGate), other.markers = c(otherMarkers, notRunMarkers), 
                                  map = markerMap, threshold = FALSE, swap=swap)
+  # Then remove the parentGate column from res
+  for(i in seq_along(res)) { res[[i]] <- res[[i]][,!colnames(res[[i]]) %in% parentGate] }
   
+  cat("\n There are", sum(unlist(lapply(res, function(x) { nrow(x) } ))), "rows after subsampling cells")
+
   # Same as res, but all data below gating thresholds are set to 0. Used to create "degree" and "poly" columns.
   # Therefore "degree" and "poly" columns are based solely on the cytokines listed under nodes and cytokines.
-  res_mask <- getSingleCellExpression(gs, nodes, map = markerMap, 
+  res_mask <- getSingleCellExpression(gs, nodes = c(userNodes, parentGate), map = markerMap, 
                                       threshold = T, swap=swap)
+  # Remove the parentGate column from res_mask
+  for(i in seq_along(res_mask)) { res_mask[[i]] <- res_mask[[i]][,!colnames(res_mask[[i]]) %in% parentGate] }
   
   # Concatenate all the res matrices together into one big tsne-friendly matrix, after
   # using the res_mask list of matrices to create additional columns "poly" and "degree"
@@ -89,7 +111,7 @@ runTSNE <- function (gs, parentGate, cytokines, otherMarkers, markerMap, notRunM
   })
   
   cat("\n cytokines:", cytokines)
-  cat("\n other markers:", otherMarkers)
+  cat("\n other markers:", as.character(otherMarkers))
   cat("\n input matrix has", nrow(res_collapse), "rows...")
   res_collapse <- subset(res_collapse, degree >= degreeFilter)
   cat("\n input matrix has", nrow(res_collapse), "rows after filtering for cells of degree >=", 
