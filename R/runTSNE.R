@@ -61,21 +61,58 @@ createTsneInputMatrix <- function(gs=NULL, parentGate = NULL, degreeFilterGates 
     # and all groupBy[[2]] category sizes equal *within* a groupBy[[1]] category
     # Usually, this means: Find maximum group size with equal # cells per sample within a group
     pdAgg <- aggregate(pd[,get(parentGate)], by=list(pd[,get(groupBy[[1]])], pd[,get(groupBy[[2]])]), sum)
+    # pdAgg now has 3 columns, Group.1, Group.2, and x (the sum of all sample cell counts for that condition)
     finalGroup1Size <- min((pdAgg %>%
                               group_by(Group.1) %>%
                               summarize(maxGroupSize = min(x) * length(x)))
                            $maxGroupSize)
     
-    cat("after grouping by '", groupBy[[1]], "', all groups will have ~", 
+    cat("after grouping by '", groupBy[[1]], "' and '", groupBy[[2]], "', all '", groupBy[[1]], "', groups will have ~", 
         finalGroup1Size, "cells.\n")
     
     # Define the number of cells that should be sampled per groupBy[[2]] category, dependent on groupBy[[1]] category
     finalGroup2Sizes <- pdAgg %>%
       group_by(Group.1) %>%
-      summarize(Group.2.Size = finalGroup1Size / length(Group.2)) # dividing by a non-divisor could result in unequal group sizes
+      summarize(Group.2.Size = finalGroup1Size %/% length(Group.2), Group.2.Size.Remainder = finalGroup1Size %% length(Group.2)) # dividing by a non-divisor could result in unequal group sizes
     
-    pd2 <- merge(pd, finalGroup2Sizes, by.x = groupBy[[1]], by.y = "Group.1")
-    pd2$nameTmp <- pd2$name # in the likely case that groupBy[[2]] is "name"
+    pd2 <- merge(pd, finalGroup2Sizes[,c("Group.1", "Group.2.Size")], by.x = groupBy[[1]], by.y = "Group.1")
+    pd2$nameTmp <- pd2$name # in the likely case that groupBy[[2]] is "name", store it in an extra column so it doesn't get erased in the next step(?)
+    
+    # When calculating Group.2.Size, the divisor might not have divided evenly into the dividend, resulting in a remainder and slightly unequal final Group.1.Sizes.
+    # If that's the case, this is where we distribute the remaining cells across samples within the Group.1 category/ies in which the remainder occured.
+    # For each Group 1 value, distribute the remainder if applicable
+    pd2 <- pd2[, {
+      mySD <- copy(.SD)
+      remainder <- finalGroup2Sizes[which(finalGroup2Sizes$Group.1 == .BY[[1]]), c("Group.2.Size.Remainder")][[1]]
+      remainderOriginal <- remainder
+      # Obtain rows where the current number of cells to be sampled is smaller than the pool of parentGate cells available for that row.
+      availableRows <- which(mySD[,get(parentGate)] > mySD[,c("Group.2.Size")])
+      while(remainder > 0 && length(availableRows) > 0) {
+        numRowsToSample <- min(remainder, length(availableRows))
+        # Sample without replacement "numRowsToSample" rows from availableRows
+        rowsToIncrement <- sample(availableRows, numRowsToSample, replace=F)
+        mySD[rowsToIncrement, Group.2.Size := mySD[rowsToIncrement, c("Group.2.Size")] + 1 ]
+        # .SD[rowsToIncrement, c("Group.2.Size")] <- .SD[rowsToIncrement, c("Group.2.Size")] + 1
+
+        # Prepare variables for the next loop
+        remainder <- remainder - numRowsToSample
+        availableRows <- which(mySD[,get(parentGate)] > mySD[,c("Group.2.Size")])
+      }
+      if(remainder > 0 && length(availableRows) == 0) {
+        print(paste0("Alert: ", remainder, " cells unable to be sampled from Group ", groupBy[[1]], " = ", .BY[[1]], ". "))
+      } else if(remainder == 0 && remainderOriginal > 0) {
+        print(paste0(remainderOriginal, " cells successfully distributed across ", groupBy[[1]], " = ", .BY[[1]], " samples. "))
+      }
+      mySD
+    }, by=c(groupBy[1])]
+    
+    # After the previous step, there should be equal number of cells for each Group.1 value:
+    cellsPerGroup1 <- pd2[,{sum(.SD[,c("Group.2.Size")])}, by=c(groupBy[1])]
+    if(!(length(unique(cellsPerGroup1$V1)) == 1)) {
+      print("Unequal number of cells to be samples for each Group.1 value:")
+      print(cellsPerGroup1)
+    }
+    
     pd2[, {
       nTcells <- .SD$Group.2.Size[[1]]
       
@@ -98,9 +135,12 @@ createTsneInputMatrix <- function(gs=NULL, parentGate = NULL, degreeFilterGates 
     }, by=groupBy]
   }
   
+  print(pd2)
+  
   cat("subsampling complete ! recomputing... \n")
   nodes <- getChildren(gsClone[[1]], parentGate, path = 2)
   for (node in nodes) recompute(gsClone, node)
+  # Question: Why doesn't this include the parentGate? parentGate counts seem correct after, but I'm unsure why.
   
   cat("generating event masks \n")
   
