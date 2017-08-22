@@ -133,9 +133,8 @@ createTsneInputMatrix <- function(gs=NULL, parentGate = NULL, degreeFilterGates 
         updateIndices(gh, parentGate, thisInd)
       }
     }, by=groupBy]
+    print(pd2)
   }
-  
-  print(pd2)
   
   cat("subsampling complete ! recomputing... \n")
   nodes <- getChildren(gsClone[[1]], parentGate, path = 2)
