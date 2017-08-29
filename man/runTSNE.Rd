@@ -2,24 +2,29 @@
 % Please edit documentation in R/runTSNE.R
 \name{runTSNE}
 \alias{runTSNE}
-\title{run tSNE from (R pkg 'Rtsne') on a gatingSet
-Will sample the minimal number of cells available in all samples to generate balanced cell counts}
+\title{Run tSNE from (R pkg 'Rtsne' or 'Rtsne.multicore') on a GatingSet}
 \usage{
-runTSNE(gs, parentGate, cytokines, otherMarkers, markerMap, swap = FALSE,
-  groupBy, degreeFilter = 0, seed = 999, theta = 0.9, ...)
+runTSNE(gs = NULL, parentGate = NULL, degreeFilterGates = c(),
+  otherMarkers = c(), notRunMarkers = c(), gateMarkerMap = NULL,
+  swap = FALSE, groupBy = c(), degreeFilter = 0, seed = 999,
+  theta = 0.9, numThreads = 1, cloneGs = TRUE, ...)
 }
 \arguments{
-\item{gs}{a GatingSet object, properly gated data with annotation in its pData}
+\item{gs}{a GatingSet object or path to a GatingSet directory, properly gated data with annotation in its pData}
 
 \item{parentGate}{a \code{string} describing the gate upstream of the cytokine gates (eg. "CD4", "cd8+", etc...)}
 
-\item{otherMarkers}{the remaining markers of the data}
+\item{degreeFilterGates}{a \code{vector} of \code{strings} describing the marker gates immediately downstream of parentGate, eg: "CD4/IL2", "CD4/IFNg". Each entry is assumed to corresspond to one marker, which is used to degree filter the data and input into tsne.}
 
-\item{markerMap}{named list of marker names to gate names, eg. list("CD4/IL2" = "IL2","CD4/IFNg" = "IFNg")}
+\item{otherMarkers}{a \code{vector} of \code{strings} describing other markers (aside from those corresponding to degreeFilterNodes) which are input into tsne but not used to degree filter}
+
+\item{notRunMarkers}{a \code{vector} of \code{strings} describing markers which are NOT used for the run itself but are imported as columns in the final tsne output matrix}
+
+\item{gateMarkerMap}{named list of gate names to marker names, eg. list("CD4/IL2" = "IL2","CD4/IFNg" = "IFNg"). Must contain entries for parentGate and degreeFilterGates. If entries are provided for otherMarkers and notRunMarkers, their corresponding xx_Bool columns will appear in the final tsne output matrix.}
 
 \item{swap}{boolean for whether marker and gate names (from markerMap above) should be swapped. Passed onto getSingleCellExpression()}
 
-\item{groupBy}{columns of the \code{gatingSet}'s phenoData, same number of cells will be sampled from each group}
+\item{groupBy}{a \code{vector} of \code{strings} describing columns of the \code{gatingSet}'s phenoData. Affects sampling (see function description).}
 
 \item{degreeFilter}{keep cells of this degree and higher, useful when tSNE takes too long to run}
 
@@ -27,14 +32,21 @@ runTSNE(gs, parentGate, cytokines, otherMarkers, markerMap, swap = FALSE,
 
 \item{theta}{parameter to be passed to the \code{Rtsne} function}
 
-\item{...}{other parameters to be passed to the \code{Rtsne} function}
+\item{numThreads}{if > 1, uses multicore t-SNE instead of regular t-SNE}
 
-\item{cytokine}{a \code{vector} of \code{strings} describing the cytokine gates immediately downstream of parentGate, eg: "IL2", "IFNg"}
+\item{cloneGs}{boolean for whether to to clone the GatingSet. Cloning is safer when gs is a GatingSet object because the GatingSet may get modified in this function. Cloning takes up time and memory, however, so if you are not using the in-memory-GatingSet again you can choose FALSE.}
+
+\item{...}{other parameters to be passed to the \code{Rtsne} function}
 }
 \value{
 a \code{matrix} of X and Y coordinates
 }
 \description{
-IMPORTANT: Requires a valid gatingSet with cytokine gates downstream of a parent gate
+If groupBy is empty, no sampling is done. If length is 1, equal number of cells are sampled from each category in the column.
+If length is 2, equal number of cells are sampled from each category in the first column. Additionally, within each category,
+equal numbers of cells are sampled from the second column (usually the Sample names column).
+}
+\details{
+IMPORTANT: Requires a valid GatingSet with cytokine gates downstream of a parent gate
 Also expects that pData(gs) contains at least columns: 'name', 'ptid' so we can identify cells later
 }

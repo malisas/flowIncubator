@@ -243,6 +243,7 @@ createTsneInputMatrix <- function(gs=NULL, parentGate = NULL, degreeFilterGates 
 #' @param cloneGs boolean for whether to to clone the GatingSet. Cloning is safer when gs is a GatingSet object because the GatingSet may get modified in this function. Cloning takes up time and memory, however, so if you are not using the in-memory-GatingSet again you can choose FALSE.
 #' @param ... other parameters to be passed to the \code{Rtsne} function
 #' @return a \code{matrix} of X and Y coordinates
+#' @export
 #' @import flowWorkspace
 #' @import data.table
 #' @import plyr
@@ -286,6 +287,12 @@ runTSNE <- function (gs=NULL, parentGate = NULL, degreeFilterGates = c(), otherM
 #' Note lack of numThreads argument. Multicore tsne doesn't work for One-SENSE (i.e. dims = 1). Since the input matrix dimensions will be smaller, it seems
 #' that multicore tsne might not provide much of a speed-up anyway. See: https://github.com/DmitryUlyanov/Multicore-TSNE#what-to-expect
 #' @param dimensionMarkers a list of character vectors, containing the markers which are to be run for each One-SENSE dimension
+#' @export
+#' @import flowWorkspace
+#' @import data.table
+#' @import plyr
+#' @import magrittr
+#' @import Rtsne
 runOneSense <- function (gs=NULL, parentGate = NULL, degreeFilterGates = c(), otherMarkers = c(), notRunMarkers = c(), gateMarkerMap = NULL, swap = FALSE,
                      groupBy = c(), degreeFilter = 0, seed = 999, theta = 0.9, cloneGs = TRUE, dimensionMarkers = list(), ...) {
   if(length(dimensionMarkers) > 3) stop("There is a maximum of 3 output dimensions (feel free to modify code if you want more)")
