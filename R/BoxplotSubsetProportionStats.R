@@ -7,10 +7,10 @@
 #' @param parentGate The gate under which the booleansubset is added
 #' @param parentGateForProportionCalc The parent gate which is to be used in proportion calculations (e.g. "8+" or "3+"). Defaults to parentGate
 #' @param groupBy optional string. What variable to stratify the boxplot by
-#' @param outdir Where to save the boxplot and stats, if desired
+#' @param outdir Where to save the boxplot and stats, if desired.
 #' @param overrideGate If this is set to TRUE, booleanSubset will override any previous node of the same name under the same parentGate.
 #' @param ylimits optional numeric vector
-#' @return boxplot and stats, unless outdir is specified
+#' @return boxplot and stats, and optionally saves the plot to outdir
 #' @import coin
 #' @import data.table
 #' @import flowWorkspace
@@ -35,7 +35,8 @@ boxplot.subset.proportion.stats <- function(gsOrGsListOrPath,
                                             groupBy=NULL,
                                             outdir=NULL,
                                             overrideGate=FALSE,
-                                            ylimits=NULL
+                                            ylimits=NULL,
+                                            baseSize=19
 ) {
   try(if(missing(gsOrGsListOrPath) || missing(booleanSubset) || missing(parentGate)) stop("Required arguments missing.") )
   
@@ -90,7 +91,7 @@ boxplot.subset.proportion.stats <- function(gsOrGsListOrPath,
     p <- ggplot2::ggplot(mergedPopStats, ggplot2::aes(x=factor(0), y = Proportion)) +
       ggplot2::geom_boxplot(outlier.shape = NA) +
       ggplot2::geom_jitter() +
-      ggplot2::theme_set(ggplot2::theme_gray(base_size = 19)) +
+      ggplot2::theme_set(ggplot2::theme_gray(base_size = baseSize)) +
       ggplot2::theme(plot.title=ggplot2::element_text(vjust=-0.8, hjust=0.5)) +
       ggplot2::labs(x="All Samples", y=paste0("Proportion of ", parentGateForProportionCalc, " Cells"),
                     title=plottitle)
@@ -101,16 +102,16 @@ boxplot.subset.proportion.stats <- function(gsOrGsListOrPath,
   } else {
     pData4Plot <- pData(gs)
     pData4Plot$name <- rownames(pData4Plot)
-    mergedPopStatsMeta <- merge(mergedPopStats, pData4Plot, by="name")
-    mergedPopStatsMeta[, groupBy] <- as.factor(mergedPopStatsMeta[, get(groupBy)])
-    test <- coin::wilcox_test(Proportion ~ get(groupBy), data=mergedPopStatsMeta)
+    mergedPopStats <- merge(mergedPopStats, pData4Plot, by="name")
+    mergedPopStats[, groupBy] <- as.factor(mergedPopStats[, get(groupBy)])
+    test <- coin::wilcox_test(Proportion ~ get(groupBy), data=mergedPopStats)
     
     plottitle <- paste0("Boxplot of Proportion of\n", booleanSubsetName, " Cells\nof total ", parentGateForProportionCalc, " Cells")
     subtitle <- paste0("Stratified by ", groupBy, "\np = ", signif(coin::pvalue(test), 4), ",  Z = ", signif(coin::statistic(test), 4))
-    p <- ggplot2::ggplot(mergedPopStatsMeta, ggplot2::aes_string(x = get("groupBy"), y = "Proportion")) +
+    p <- ggplot2::ggplot(mergedPopStats, ggplot2::aes_string(x = get("groupBy"), y = "Proportion")) +
       ggplot2::geom_boxplot(outlier.shape = NA) +
       ggplot2::geom_jitter() +
-      ggplot2::theme_set(ggplot2::theme_gray(base_size = 19)) +
+      ggplot2::theme_set(ggplot2::theme_gray(base_size = baseSize)) +
       ggplot2::theme(plot.title=ggplot2::element_text(vjust=-0.8, hjust=0.5)) +
       ggplot2::labs(x=groupBy, y=paste0("Proportion of ", parentGateForProportionCalc, " Cells"),
                     title=plottitle, subtitle=subtitle)
@@ -119,13 +120,30 @@ boxplot.subset.proportion.stats <- function(gsOrGsListOrPath,
     }
     p
   }
-  if(is.null(outdir)) {
-    myPlot
-  } else {
-    filename <- paste0("BoxplotProportion_", booleanSubsetName, "_of_", parentGateForProportionCalc ,"_by_", groupBy, ".png")
+  # if(is.null(outdir)) {
+  #   list(plot = myPlot, data = mergedPopStats)
+  # } else {
+  #   filename <- if(is.null(groupBy)) {
+  #     paste0("BoxplotProportion_", booleanSubsetName, "_of_", parentGateForProportionCalc, ".png")
+  #   } else {
+  #     paste0("BoxplotProportion_", booleanSubsetName, "_of_", parentGateForProportionCalc ,"_by_", groupBy, ".png")
+  #   }
+  #   message(paste0("Saving plot to ", file.path(outdir, filename)))
+  #   ggplot2::ggsave(filename=file.path(outdir, filename),
+  #                   plot=myPlot,
+  #                   width=6.66, height=7.85)
+  # }
+  if(!(is.null(outdir))) {
+    parentGateForProportionCalc4File <- gsub("/", ":", parentGateForProportionCalc)
+    filename <- if(is.null(groupBy)) {
+      paste0("BoxplotProportion_", booleanSubsetName, "_of_", parentGateForProportionCalc4File, ".png")
+    } else {
+      paste0("BoxplotProportion_", booleanSubsetName, "_of_", parentGateForProportionCalc4File ,"_by_", groupBy, ".png")
+    }
     message(paste0("Saving plot to ", file.path(outdir, filename)))
     ggplot2::ggsave(filename=file.path(outdir, filename),
                     plot=myPlot,
-                    width=6.66, height=7.85)
+                    width=8, height=7.85)
   }
+  list(plot = myPlot, data = mergedPopStats)
 }

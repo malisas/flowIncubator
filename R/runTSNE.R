@@ -1,3 +1,10 @@
+#' @import flowWorkspace
+#' @import data.table
+#' @import plyr
+#' @import dplyr
+#' @import magrittr
+#' @import Rtsne
+#' @import Rtsne.multicore
 createTsneInputMatrix <- function(gs=NULL, parentGate = NULL, degreeFilterGates = c(), otherMarkers = c(), notRunMarkers = c(), gateMarkerMap = NULL, swap = FALSE,
                                   groupBy = c(), degreeFilter = 0, seed = 999, theta = 0.9, cloneGs = TRUE) {
   if (is.null(gs)) stop ("required gs is missing ! STOPPING....")
@@ -64,16 +71,21 @@ createTsneInputMatrix <- function(gs=NULL, parentGate = NULL, degreeFilterGates 
     # pdAgg now has 3 columns, Group.1, Group.2, and x (the sum of all sample cell counts for that condition)
     finalGroup1Size <- min((pdAgg %>%
                               group_by(Group.1) %>%
-                              summarize(maxGroupSize = min(x) * length(x)))
+                              dplyr::summarize(maxGroupSize = min(x) * length(x)))
                            $maxGroupSize)
     
     cat("after grouping by '", groupBy[[1]], "' and '", groupBy[[2]], "', all '", groupBy[[1]], "', groups will have ~", 
         finalGroup1Size, "cells.\n")
     
     # Define the number of cells that should be sampled per groupBy[[2]] category, dependent on groupBy[[1]] category
+    # Note: If I don't import dplyr, the result is a dataframe not a tbl_df. The tbl_df version has all the desired rows and columns (Group.1).
+    # I narrowed the problem down to the summarize function use below. dplyr::summarize returns a tbl_df, whereas plyr:summarize just returns a data frame.
+    # This worked alright in interactive mode, but the function loading order must have changed when using the packaged version.
     finalGroup2Sizes <- pdAgg %>%
       group_by(Group.1) %>%
-      summarize(Group.2.Size = finalGroup1Size %/% length(Group.2), Group.2.Size.Remainder = finalGroup1Size %% length(Group.2)) # dividing by a non-divisor could result in unequal group sizes
+      dplyr::summarize(Group.2.Size = finalGroup1Size %/% length(Group.2), Group.2.Size.Remainder = finalGroup1Size %% length(Group.2)) # dividing by a non-divisor could result in unequal group sizes
+    
+    print(finalGroup2Sizes)
     
     pd2 <- merge(pd, finalGroup2Sizes[,c("Group.1", "Group.2.Size")], by.x = groupBy[[1]], by.y = "Group.1")
     pd2$nameTmp <- pd2$name # in the likely case that groupBy[[2]] is "name", store it in an extra column so it doesn't get erased in the next step(?)
@@ -247,6 +259,7 @@ createTsneInputMatrix <- function(gs=NULL, parentGate = NULL, degreeFilterGates 
 #' @import flowWorkspace
 #' @import data.table
 #' @import plyr
+#' @import dplyr
 #' @import magrittr
 #' @import Rtsne
 #' @import Rtsne.multicore

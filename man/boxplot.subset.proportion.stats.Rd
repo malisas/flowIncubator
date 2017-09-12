@@ -6,7 +6,7 @@
 \usage{
 \method{boxplot}{subset.proportion.stats}(gsOrGsListOrPath, booleanSubset,
   parentGate, parentGateForProportionCalc = parentGate, groupBy = NULL,
-  outdir = NULL, overrideGate = FALSE, ylimits = NULL)
+  outdir = NULL, overrideGate = FALSE, ylimits = NULL, baseSize = 19)
 }
 \arguments{
 \item{gsOrGsListOrPath}{Either a GatingSet, a GatingSetList, or path to one of these objects on disk}
@@ -19,14 +19,14 @@
 
 \item{groupBy}{optional string. What variable to stratify the boxplot by}
 
-\item{outdir}{Where to save the boxplot and stats, if desired}
+\item{outdir}{Where to save the boxplot and stats, if desired.}
 
 \item{overrideGate}{If this is set to TRUE, booleanSubset will override any previous node of the same name under the same parentGate.}
 
 \item{ylimits}{optional numeric vector}
 }
 \value{
-boxplot and stats, unless outdir is specified
+boxplot and stats, and optionally saves the plot to outdir
 }
 \description{
 Adds the given booleanSubset to the gating tree and creates a stratified boxplot of the per-patient proportions of this subset.
