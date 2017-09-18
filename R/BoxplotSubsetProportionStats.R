@@ -1,15 +1,18 @@
-#' Stratified Boxplots of the Proportion of the Boolean Subset seen
+#' Stratified Boxplots of the Proportion of the Boolean/Existing Subset seen
 #' 
-#' Adds the given booleanSubset to the gating tree and creates a stratified boxplot of the per-patient proportions of this subset.
+#' Creates a stratified boxplot of the per-patient proportions of the given subset.
+#' Iff booleanSubset is provided, adds the given booleanSubset to the gating tree first.
 #'
 #' @param gsOrGsListOrPath Either a GatingSet, a GatingSetList, or path to one of these objects on disk
-#' @param booleanSubset The booleanSubset (a combination of existing gates) in string format, e.g. "8+/GMM+&!8+/GAMMADELTA"
+#' @param existingSubset (existingSubset or booleanSubset must be provided) The name of the existing subset of interest, e.g. "CD3/GMM"
+#' @param booleanSubset (existingSubset or booleanSubset must be provided) The booleanSubset (a combination of existing gates) in string format, e.g. "8+/GMM+&!8+/GAMMADELTA"
 #' @param parentGate The gate under which the booleansubset is added
 #' @param parentGateForProportionCalc The parent gate which is to be used in proportion calculations (e.g. "8+" or "3+"). Defaults to parentGate
 #' @param groupBy optional string. What variable to stratify the boxplot by
 #' @param outdir Where to save the boxplot and stats, if desired.
 #' @param overrideGate If this is set to TRUE, booleanSubset will override any previous node of the same name under the same parentGate.
 #' @param ylimits optional numeric vector
+#' @param sampleIDCol (optional) Name of the GatingSet metadata column which contains individual sample identifiers. If sampleIDCol is provided, outliers will be labeled with this value.
 #' @return boxplot and stats, and optionally saves the plot to outdir
 #' @import coin
 #' @import data.table
@@ -29,16 +32,18 @@
 #'                                 ylimits=NULL)
 #' }
 boxplot.subset.proportion.stats <- function(gsOrGsListOrPath,
-                                            booleanSubset,
+                                            existingSubset=NULL,
+                                            booleanSubset=NULL,
                                             parentGate,
                                             parentGateForProportionCalc=parentGate,
                                             groupBy=NULL,
                                             outdir=NULL,
                                             overrideGate=FALSE,
                                             ylimits=NULL,
-                                            baseSize=19
+                                            baseSize=19,
+                                            sampleIDCol=NULL
 ) {
-  try(if(missing(gsOrGsListOrPath) || missing(booleanSubset) || missing(parentGate)) stop("Required arguments missing.") )
+  try(if(missing(gsOrGsListOrPath) || (is.null(booleanSubset) && is.null(existingSubset)) || missing(parentGate)) stop("Required arguments missing.") )
   
   gs <- if(class(gsOrGsListOrPath) == "GatingSet" || class(gsOrGsListOrPath) == "GatingSetList") {
     gsOrGsListOrPath
@@ -56,38 +61,67 @@ boxplot.subset.proportion.stats <- function(gsOrGsListOrPath,
     loadGSListOrGS(gsOrGsListOrPath)
   }
   
-  # Check if booleanSubset already exists under parentGate
-  booleanSubsetName <- paste0(parentGate, ":", booleanSubset)
-  booleanSubsetName <- gsub("/", ":", booleanSubsetName)
-  if(booleanSubsetName %in% getNodes(gs, path="auto")) {
-    # If the gate already exists, decide what to do with it.
-    if(overrideGate) {
-      message(paste0("Gate ", booleanSubsetName, " already exists. Deleting old gate and adding new gate..."))
+  subsetInfo <- if(!(is.null(booleanSubset))) {
+    message(paste0("booleanSubset ", booleanSubset, " given"))
+    
+    # Check if booleanSubset already exists under parentGate
+    booleanSubsetName <- paste0(parentGate, ":", booleanSubset)
+    booleanSubsetName <- gsub("/", ":", booleanSubsetName)
+    if(booleanSubsetName %in% getNodes(gs, path="auto")) {
+      # If the gate already exists, decide what to do with it.
+      if(overrideGate) {
+        message(paste0("Gate ", booleanSubsetName, " already exists. Deleting old gate and adding new gate..."))
+        call <- substitute(flowWorkspace::booleanFilter(v), list(v = as.symbol(booleanSubset)))
+        g <- eval(call)
+        flowWorkspace::Rm(booleanSubsetName, gs)
+        flowWorkspace::add(gs, g, parent = parentGate, name=booleanSubsetName)
+        flowWorkspace::recompute(gs, booleanSubsetName)
+      } else {
+        message(paste0("Gate ", booleanSubsetName, " already exists. Keeping old gate..."))
+      }
+    } else {
+      # If the gate doesn't exist, add it.
+      message(paste0("Adding new gate ", booleanSubsetName, " to GatingSet/GatingSetList..."))
       call <- substitute(flowWorkspace::booleanFilter(v), list(v = as.symbol(booleanSubset)))
       g <- eval(call)
-      flowWorkspace::Rm(booleanSubsetName, gs)
       flowWorkspace::add(gs, g, parent = parentGate, name=booleanSubsetName)
       flowWorkspace::recompute(gs, booleanSubsetName)
-    } else {
-      message(paste0("Gate ", booleanSubsetName, " already exists. Keeping old gate..."))
     }
-  } else {
-    # If the gate doesn't exist, add it.
-    message(paste0("Adding new gate ", booleanSubsetName, " to GatingSet/GatingSetList..."))
-    call <- substitute(flowWorkspace::booleanFilter(v), list(v = as.symbol(booleanSubset)))
-    g <- eval(call)
-    flowWorkspace::add(gs, g, parent = parentGate, name=booleanSubsetName)
-    flowWorkspace::recompute(gs, booleanSubsetName)
+    
+    list("subsetName" = booleanSubsetName, "popStats" = flowWorkspace::getPopStats(gs, flowJo=FALSE, subpopulations=c(booleanSubsetName)))
+  } else if(!is.null(existingSubset)) {
+    message(paste0("existingSubset ", existingSubset, " given"))
+    if(! (existingSubset %in% getChildren(gs[[1]], parentGateForProportionCalc, path="auto"))) {
+      stop(paste0("existingSubset ", existingSubset, " not a child of ", parentGateForProportionCalc))
+      }
+
+    list("subsetName" = existingSubset, "popStats" = flowWorkspace::getPopStats(gs, flowJo=FALSE, subpopulations=c(existingSubset)))
   }
-  
-  booleanSubsetPopStats <- flowWorkspace::getPopStats(gs, flowJo=FALSE, subpopulations=c(booleanSubsetName))
+
+  booleanSubsetPopStats <- subsetInfo$popStats
   parentGateForProportionCalcPopStats <- flowWorkspace::getPopStats(gs, flowJo=FALSE, subpopulations=c(parentGateForProportionCalc))
   mergedPopStats <- merge(booleanSubsetPopStats[,c("name", "Count")], parentGateForProportionCalcPopStats[,c("name", "Count")], by="name", suffixes=c(".boolSubset", ".parentForProportion"))
   mergedPopStats$Proportion <- mergedPopStats$Count.boolSubset / mergedPopStats$Count.parentForProportion
   
+  # Function that takes in vector of data and a coefficient,
+  # returns boolean vector if a certain point is an outlier or not
+  # From: https://stackoverflow.com/a/33525306/6282213
+  check_outlier <- function(v, coef=1.5){
+    quantiles <- quantile(v,probs=c(0.25,0.75))
+    IQR <- quantiles[2]-quantiles[1]
+    res <- v < (quantiles[1]-coef*IQR)|v > (quantiles[2]+coef*IQR)
+    return(res)
+  }
+  pData4Plot <- pData(gs)
+  pData4Plot$name <- rownames(pData4Plot)
+  mergedPopStats <- merge(mergedPopStats, pData4Plot, by="name")
+  mergedPopStats[, groupBy] <- as.factor(mergedPopStats[, get(groupBy)])
+  
+  subsetNameForPlot <- subsetInfo$subsetName
   myPlot <- if(is.null(groupBy)) {
-    # Make a simple un-stratified boxplot of the proportion of booleanSubsetName cells
-    plottitle <- paste0("Boxplot of Proportion of\n", booleanSubsetName, " Cells\nof total ", parentGateForProportionCalc, " Cells")
+    # Make a simple un-stratified boxplot of the proportion of subsetNameForPlot cells
+
+    plottitle <- paste0("Boxplot of Proportion of\n", subsetNameForPlot, " Cells\nof total ", parentGateForProportionCalc, " Cells")
     p <- ggplot2::ggplot(mergedPopStats, ggplot2::aes(x=factor(0), y = Proportion)) +
       ggplot2::geom_boxplot(outlier.shape = NA) +
       ggplot2::geom_jitter() +
@@ -95,18 +129,21 @@ boxplot.subset.proportion.stats <- function(gsOrGsListOrPath,
       ggplot2::theme(plot.title=ggplot2::element_text(vjust=-0.8, hjust=0.5)) +
       ggplot2::labs(x="All Samples", y=paste0("Proportion of ", parentGateForProportionCalc, " Cells"),
                     title=plottitle)
+    if(!is.null(sampleIDCol)) {
+      mergedPopStats[,outlier:=check_outlier(Proportion)]
+      mergedPopStats[,label:=ifelse(outlier, get(sampleIDCol),"")]
+      p <- p + ggplot2::geom_text(ggplot2::aes(label=label),vjust=-0.2)
+    }
+
     if(!is.null(ylimits)) {
       p <- p + ggplot2::coord_cartesian(ylim=ylimits) # adjust visible data for y axis but keep points
     }
     p
   } else {
-    pData4Plot <- pData(gs)
-    pData4Plot$name <- rownames(pData4Plot)
-    mergedPopStats <- merge(mergedPopStats, pData4Plot, by="name")
-    mergedPopStats[, groupBy] <- as.factor(mergedPopStats[, get(groupBy)])
+    # Make a stratified boxplot of the proportion of subsetNameForPlot cells
     test <- coin::wilcox_test(Proportion ~ get(groupBy), data=mergedPopStats)
-    
-    plottitle <- paste0("Boxplot of Proportion of\n", booleanSubsetName, " Cells\nof total ", parentGateForProportionCalc, " Cells")
+
+    plottitle <- paste0("Boxplot of Proportion of\n", subsetNameForPlot, " Cells\nof total ", parentGateForProportionCalc, " Cells")
     subtitle <- paste0("Stratified by ", groupBy, "\np = ", signif(coin::pvalue(test), 4), ",  Z = ", signif(coin::statistic(test), 4))
     p <- ggplot2::ggplot(mergedPopStats, ggplot2::aes_string(x = get("groupBy"), y = "Proportion")) +
       ggplot2::geom_boxplot(outlier.shape = NA) +
@@ -115,6 +152,11 @@ boxplot.subset.proportion.stats <- function(gsOrGsListOrPath,
       ggplot2::theme(plot.title=ggplot2::element_text(vjust=-0.8, hjust=0.5)) +
       ggplot2::labs(x=groupBy, y=paste0("Proportion of ", parentGateForProportionCalc, " Cells"),
                     title=plottitle, subtitle=subtitle)
+    if(!is.null(sampleIDCol)) {
+      mergedPopStats[,outlier:=check_outlier(Proportion), by=get(groupBy)]
+      mergedPopStats[,label:=ifelse(outlier, get(sampleIDCol),"")]
+      p <- p + ggplot2::geom_text(ggplot2::aes(label=label),vjust=-0.2)
+    }
     if(!is.null(ylimits)) {
       p <- p + ggplot2::coord_cartesian(ylim=ylimits) # adjust visible data for y axis but keep points
     }
@@ -124,9 +166,9 @@ boxplot.subset.proportion.stats <- function(gsOrGsListOrPath,
   #   list(plot = myPlot, data = mergedPopStats)
   # } else {
   #   filename <- if(is.null(groupBy)) {
-  #     paste0("BoxplotProportion_", booleanSubsetName, "_of_", parentGateForProportionCalc, ".png")
+  #     paste0("BoxplotProportion_", subsetNameForPlot, "_of_", parentGateForProportionCalc, ".png")
   #   } else {
-  #     paste0("BoxplotProportion_", booleanSubsetName, "_of_", parentGateForProportionCalc ,"_by_", groupBy, ".png")
+  #     paste0("BoxplotProportion_", subsetNameForPlot, "_of_", parentGateForProportionCalc ,"_by_", groupBy, ".png")
   #   }
   #   message(paste0("Saving plot to ", file.path(outdir, filename)))
   #   ggplot2::ggsave(filename=file.path(outdir, filename),
@@ -136,9 +178,9 @@ boxplot.subset.proportion.stats <- function(gsOrGsListOrPath,
   if(!(is.null(outdir))) {
     parentGateForProportionCalc4File <- gsub("/", ":", parentGateForProportionCalc)
     filename <- if(is.null(groupBy)) {
-      paste0("BoxplotProportion_", booleanSubsetName, "_of_", parentGateForProportionCalc4File, ".png")
+      paste0("BoxplotProportion_", subsetNameForPlot, "_of_", parentGateForProportionCalc4File, ".png")
     } else {
-      paste0("BoxplotProportion_", booleanSubsetName, "_of_", parentGateForProportionCalc4File ,"_by_", groupBy, ".png")
+      paste0("BoxplotProportion_", subsetNameForPlot, "_of_", parentGateForProportionCalc4File ,"_by_", groupBy, ".png")
     }
     message(paste0("Saving plot to ", file.path(outdir, filename)))
     ggplot2::ggsave(filename=file.path(outdir, filename),

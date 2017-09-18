@@ -2,16 +2,20 @@
 % Please edit documentation in R/BoxplotSubsetProportionStats.R
 \name{boxplot.subset.proportion.stats}
 \alias{boxplot.subset.proportion.stats}
-\title{Stratified Boxplots of the Proportion of the Boolean Subset seen}
+\title{Stratified Boxplots of the Proportion of the Boolean/Existing Subset seen}
 \usage{
-\method{boxplot}{subset.proportion.stats}(gsOrGsListOrPath, booleanSubset,
-  parentGate, parentGateForProportionCalc = parentGate, groupBy = NULL,
-  outdir = NULL, overrideGate = FALSE, ylimits = NULL, baseSize = 19)
+\method{boxplot}{subset.proportion.stats}(gsOrGsListOrPath,
+  existingSubset = NULL, booleanSubset = NULL, parentGate,
+  parentGateForProportionCalc = parentGate, groupBy = NULL, outdir = NULL,
+  overrideGate = FALSE, ylimits = NULL, baseSize = 19,
+  sampleIDCol = NULL)
 }
 \arguments{
 \item{gsOrGsListOrPath}{Either a GatingSet, a GatingSetList, or path to one of these objects on disk}
 
-\item{booleanSubset}{The booleanSubset (a combination of existing gates) in string format, e.g. "8+/GMM+&!8+/GAMMADELTA"}
+\item{existingSubset}{(existingSubset or booleanSubset must be provided) The name of the existing subset of interest, e.g. "CD3/GMM"}
+
+\item{booleanSubset}{(existingSubset or booleanSubset must be provided) The booleanSubset (a combination of existing gates) in string format, e.g. "8+/GMM+&!8+/GAMMADELTA"}
 
 \item{parentGate}{The gate under which the booleansubset is added}
 
@@ -24,12 +28,15 @@
 \item{overrideGate}{If this is set to TRUE, booleanSubset will override any previous node of the same name under the same parentGate.}
 
 \item{ylimits}{optional numeric vector}
+
+\item{sampleIDCol}{(optional) Name of the GatingSet metadata column which contains individual sample identifiers. If sampleIDCol is provided, outliers will be labeled with this value.}
 }
 \value{
 boxplot and stats, and optionally saves the plot to outdir
 }
 \description{
-Adds the given booleanSubset to the gating tree and creates a stratified boxplot of the per-patient proportions of this subset.
+Creates a stratified boxplot of the per-patient proportions of the given subset.
+Iff booleanSubset is provided, adds the given booleanSubset to the gating tree first.
 }
 \examples{
 \dontrun{
