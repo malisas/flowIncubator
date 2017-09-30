@@ -115,8 +115,8 @@ boxplot.subset.proportion.stats <- function(gsOrGsListOrPath,
   pData4Plot <- pData(gs)
   pData4Plot$name <- rownames(pData4Plot)
   mergedPopStats <- merge(mergedPopStats, pData4Plot, by="name")
-  mergedPopStats[, groupBy] <- as.factor(mergedPopStats[, get(groupBy)])
-  
+    
+  mergedPopStats$GroupTmp <- as.factor(mergedPopStats[, get(groupBy)])
   subsetNameForPlot <- subsetInfo$subsetName
   myPlot <- if(is.null(groupBy)) {
     # Make a simple un-stratified boxplot of the proportion of subsetNameForPlot cells
@@ -141,11 +141,11 @@ boxplot.subset.proportion.stats <- function(gsOrGsListOrPath,
     p
   } else {
     # Make a stratified boxplot of the proportion of subsetNameForPlot cells
-    test <- coin::wilcox_test(Proportion ~ get(groupBy), data=mergedPopStats)
+    test <- coin::wilcox_test(Proportion ~ GroupTmp, data=mergedPopStats)
 
     plottitle <- paste0("Boxplot of Proportion of\n", subsetNameForPlot, " Cells\nof total ", parentGateForProportionCalc, " Cells")
     subtitle <- paste0("Stratified by ", groupBy, "\np = ", signif(coin::pvalue(test), 4), ",  Z = ", signif(coin::statistic(test), 4))
-    p <- ggplot2::ggplot(mergedPopStats, ggplot2::aes_string(x = get("groupBy"), y = "Proportion")) +
+    p <- ggplot2::ggplot(mergedPopStats, ggplot2::aes_string(x = "GroupTmp", y = "Proportion")) +
       ggplot2::geom_boxplot(outlier.shape = NA) +
       ggplot2::geom_jitter() +
       ggplot2::theme_set(ggplot2::theme_gray(base_size = baseSize)) +
@@ -153,7 +153,7 @@ boxplot.subset.proportion.stats <- function(gsOrGsListOrPath,
       ggplot2::labs(x=groupBy, y=paste0("Proportion of ", parentGateForProportionCalc, " Cells"),
                     title=plottitle, subtitle=subtitle)
     if(!is.null(sampleIDCol)) {
-      mergedPopStats[,outlier:=check_outlier(Proportion), by=get(groupBy)]
+      mergedPopStats[,outlier:=check_outlier(Proportion), by=GroupTmp]
       mergedPopStats[,label:=ifelse(outlier, get(sampleIDCol),"")]
       p <- p + ggplot2::geom_text(ggplot2::aes(label=label),vjust=-0.2)
     }
