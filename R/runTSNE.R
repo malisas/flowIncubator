@@ -1,3 +1,4 @@
+#' @import cytoUtils
 #' @import flowWorkspace
 #' @import data.table
 #' @import plyr
@@ -40,9 +41,9 @@ createTsneInputMatrix <- function(gs=NULL, parentGate = NULL, degreeFilterGates 
   pd <- merge(pd, parent_count, by = "name")
   
   if (length(groupBy) == 1) {
-    nTcells <- min(pd[, sum(get(parentGate)), by = group][, 
+    nTcells <- min(pd[, sum(get(parentGate)), by = groupBy][, 
                                                           V1])
-    cat("after grouping by '", group, "', all groups will have at least", 
+    cat("after grouping by '", groupBy, "', all groups will have at least", 
         nTcells, "cells.\n")
     
     pd[, {
@@ -62,7 +63,7 @@ createTsneInputMatrix <- function(gs=NULL, parentGate = NULL, degreeFilterGates 
         gh <- gsClone[[sn]]
         updateIndices(gh, parentGate, thisInd)
       }
-    }, by = group] 
+    }, by = groupBy] 
   } else if (length(groupBy) == 2) {
     # Calculate the "minimum maximum group size" which lets the size of all groupBy[[1]] categories be equal
     # and all groupBy[[2]] category sizes equal *within* a groupBy[[1]] category
