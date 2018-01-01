@@ -5,9 +5,9 @@
 \title{A function to run One-SENSE. Has an additional dimensionMarkers parameter. For now, assuming people won't run more than 3 dimensions.}
 \usage{
 runOneSense(gs = NULL, parentGate = NULL, degreeFilterGates = c(),
-  otherMarkers = c(), notRunMarkers = c(), gateMarkerMap = NULL,
-  swap = FALSE, groupBy = c(), degreeFilter = 0, seed = 999,
-  theta = 0.9, cloneGs = TRUE, dimensionMarkers = list(), ...)
+  otherGates = c(), tsneMarkers = c(), swap = FALSE, groupBy = c(),
+  degreeFilter = 0, seed = 999, theta = 0.9, cloneGs = TRUE,
+  dimensionMarkers = list(), ...)
 }
 \arguments{
 \item{dimensionMarkers}{a list of character vectors, containing the markers which are to be run for each One-SENSE dimension}

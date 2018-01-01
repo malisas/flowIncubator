@@ -5,28 +5,26 @@
 \title{Run tSNE from (R pkg 'Rtsne' or 'Rtsne.multicore') on a GatingSet}
 \usage{
 runTSNE(gs = NULL, parentGate = NULL, degreeFilterGates = c(),
-  otherMarkers = c(), notRunMarkers = c(), gateMarkerMap = NULL,
-  swap = FALSE, groupBy = c(), degreeFilter = 0, seed = 999,
-  theta = 0.9, numThreads = 1, cloneGs = TRUE, ...)
+  otherGates = c(), tsneMarkers = c(), swap = FALSE, groupBy = c(),
+  degreeFilter = 0, seed = 999, theta = 0.9, numThreads = 1,
+  cloneGs = TRUE, ...)
 }
 \arguments{
 \item{gs}{a GatingSet object or path to a GatingSet directory, properly gated data with annotation in its pData}
 
 \item{parentGate}{a \code{string} describing the gate upstream of the cytokine gates (eg. "CD4", "cd8+", etc...)}
 
-\item{degreeFilterGates}{a \code{vector} of \code{strings} describing the marker gates immediately downstream of parentGate, eg: "CD4/IL2", "CD4/IFNg". Each entry is assumed to corresspond to one marker, which is used to degree filter the data and input into tsne.}
+\item{degreeFilterGates}{a \code{vector} of \code{strings} describing the marker gates immediately downstream of parentGate, eg: "CD4/IL2", "CD4/IFNg". Events are assigned degrees based on how many degreeFilterGates they belong to}
 
-\item{otherMarkers}{a \code{vector} of \code{strings} describing other markers (aside from those corresponding to degreeFilterNodes) which are input into tsne but not used to degree filter}
+\item{otherGates}{a \code{vector} of \code{strings} describing additional gates to obtain boolean data for (gate membership is assigned to each cell)}
 
-\item{notRunMarkers}{a \code{vector} of \code{strings} describing markers which are NOT used for the run itself but are imported as columns in the final tsne output matrix}
-
-\item{gateMarkerMap}{named list of gate names to marker names, eg. list("CD4/IL2" = "IL2","CD4/IFNg" = "IFNg"). Must contain entries for parentGate and degreeFilterGates. If entries are provided for otherMarkers and notRunMarkers, their corresponding xx_Bool columns will appear in the final tsne output matrix.}
+\item{tsneMarkers}{the markers on which to run tSNE. Although data from all markers will be returned, tSNE is only run on the markers specified in tsneMarkers}
 
 \item{swap}{boolean for whether marker and gate names (from markerMap above) should be swapped. Passed onto getSingleCellExpression()}
 
 \item{groupBy}{a \code{vector} of \code{strings} describing columns of the \code{gatingSet}'s phenoData. Affects sampling (see function description).}
 
-\item{degreeFilter}{keep cells of this degree and higher, useful when tSNE takes too long to run}
+\item{degreeFilter}{keep cells of this degree and higher}
 
 \item{seed}{since tSNE is random, need a random seed so we can reproduce results}
 
@@ -42,11 +40,13 @@ runTSNE(gs = NULL, parentGate = NULL, degreeFilterGates = c(),
 a \code{matrix} of X and Y coordinates
 }
 \description{
-If groupBy is empty, no sampling is done. If length is 1, equal number of cells are sampled from each category in the column.
+- If groupBy is empty, no sampling is done. If length is 1, equal number of cells are sampled from each category in the column.
 If length is 2, equal number of cells are sampled from each category in the first column. Additionally, within each category,
 equal numbers of cells are sampled from the second column (usually the Sample names column).
 }
 \details{
-IMPORTANT: Requires a valid GatingSet with cytokine gates downstream of a parent gate
-Also expects that pData(gs) contains at least columns: 'name', 'ptid' so we can identify cells later
+- All channels must have non-NA marker names and be unique.
+
+- Requires a valid GatingSet with cytokine gates downstream of a parent gate
+- Also expects that pData(gs) contains at least columns: 'name', 'ptid' so we can identify cells later
 }
