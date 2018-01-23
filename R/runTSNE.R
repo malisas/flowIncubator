@@ -171,33 +171,58 @@ createTsneInputMatrix <- function(gs=NULL, parentGate = NULL, degreeFilterGates 
   
   # Obtain the row indices which correspond to cells which are in each gate in degreeFilterGates
   # indices are based on the root node (i.e. all events). parentGate indices will reflect any sampling performed above.
-  degreeFilterGateBooleans <- lapply(gsClone, function(gh) {
-    d <- do.call(cbind, lapply(c(parentGate, degreeFilterGates, otherGates), function(gate) { as.integer(getIndiceMat(gh, gate)) }))
+  # Save memory by subsetting by degreeFilter here. Use degreeFilterGateBooleans to filter the rows for events which have the required degree or higher
+  # I have to store the indices which pass the degreeFilter, but I assume this will take up a small amount of space compared to storing the entire data.
+  totalParentGateEvents <- 0
+  degreeFilterIndices <- list() # A list of the cell indices which have degree >= the degreeFilter degree, to be populated in the loop below
+  degreeFilterGateBooleans <- list()
+  for(gh_name in rownames(pData(gsClone))) {
+    d <- do.call(cbind, lapply(c(parentGate, degreeFilterGates, otherGates), function(gate) { as.integer(getIndiceMat(gsClone[[gh_name]], gate)) }))
     # Add degree column by taking row sums of degreeFilterGates columns. The first column is parentGate, which we don't count as a degree.
     d <- cbind(d, if(length(degreeFilterGates) > 1) {
       rowSums(d[, 2:(1+length(degreeFilterGates))])
-      } else if(length(degreeFilterGates) == 1){
-        d[, 2]
-      } else {
-        0
-      })
+    } else if(length(degreeFilterGates) == 1){
+      d[, 2]
+    } else {
+      0
+    })
     colnames(d) <- c(parentGate, degreeFilterGates, otherGates, "degree")
-    d
-  })
+    # Members of the parentGate will have degree 0 or higher (just for tracking purposes)
+    totalParentGateEvents <- totalParentGateEvents + length(which(d[,"degree"] >= 0))
+    indicesPassingDegreeFilter <- which(d[,"degree"] >= degreeFilter)
+    degreeFilterIndices[[gh_name]] <- indicesPassingDegreeFilter
+    degreeFilterGateBooleans[[gh_name]] <- d[indicesPassingDegreeFilter,]
+    gc() # try cleaning up memory
+  }
+  
+  # degreeFilterGateBooleans <- lapply(rownames(gsClone), function(gh_name) {
+  #   d <- do.call(cbind, lapply(c(parentGate, degreeFilterGates, otherGates), function(gate) { as.integer(getIndiceMat(gsClone[[gh_name]], gate)) }))
+  #   # Add degree column by taking row sums of degreeFilterGates columns. The first column is parentGate, which we don't count as a degree.
+  #   d <- cbind(d, if(length(degreeFilterGates) > 1) {
+  #     rowSums(d[, 2:(1+length(degreeFilterGates))])
+  #     } else if(length(degreeFilterGates) == 1){
+  #       d[, 2]
+  #     } else {
+  #       0
+  #     })
+  #   colnames(d) <- c(parentGate, degreeFilterGates, otherGates, "degree")
+  #   totalParentGateEvents <<- totalParentGateEvents + length(which(d[,"degree"] >= 0)) # <<- required to make lapply function modify variable out of usual scope
+  #   indicesPassingDegreeFilter <- which(d[,"degree"] >= degreeFilter)
+  #   degreeFilterIndices[[gh_name]] <<- indicesPassingDegreeFilter # required <<- here as well, I think
+  #   d[indicesPassingDegreeFilter,]
+  # })
+  
+  cat("obtaining quantitative data \n")
   
   # And then obtain the numerical expression data for each marker
-  expressionData <- lapply(gsClone, function(gh) {
-    d <- exprs(getData(gh))
+  expressionData <- lapply(rownames(pData(gsClone)), function(gh_name) {
+    d <- exprs(getData(gsClone[[gh_name]]))
     colnames(d) <- allMarkerNames[match(colnames(d), allMarkerNames[,1]), 2]
-    d
+    d[degreeFilterIndices[[gh_name]],]
     })
-  
-  # Members of the parentGate will have degree 0 or higher (just for tracking purposes)
-  totalParentGateEvents <- sum(unlist(lapply(degreeFilterGateBooleans, function(x) { length(which(x[,"degree"] >= 0)) })))
-  
-  # Concatenate all the expressionData matrices together into one big tsne-friendly matrix, after
-  # using the degreeFilterGateBooleans list of matrices to create additional "degree" and "xx_Bool" columns
-  # Use degreeFilterGateBooleans to filter the rows for events which have the required degree or higher
+  names(expressionData) <- rownames(pData(gsClone))
+    
+  # Concatenate all the expressionData matrices together into one big tsne-friendly matrix
   # Note that degreeFilterGateBooleans and expressionData rows correspond to the same events
   data_collapse <- ldply(names(expressionData), function(sn) { # each element of expressionData corresponds to a sample
     message(".", appendLF = F)
@@ -209,9 +234,9 @@ createTsneInputMatrix <- function(gs=NULL, parentGate = NULL, degreeFilterGates 
       pd <- pData(gsClone[[sn]])
       rownames(pd) <- NULL
       mat_combined <- cbind(mat, mat_mask, pd)
-      # Events which make it past the degreeFilter will have degree >= degreeFilter
-      mat_combined <- subset(mat_combined, degree >= degreeFilter)
-      # Return the combined and filtered matrices
+      # # Events which make it past the degreeFilter will have degree >= degreeFilter
+      # mat_combined <- subset(mat_combined, degree >= degreeFilter)
+      # Return the filtered and combined matrices
       mat_combined
     }
     else NULL
