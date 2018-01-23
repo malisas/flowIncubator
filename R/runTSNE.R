@@ -172,7 +172,7 @@ createTsneInputMatrix <- function(gs=NULL, parentGate = NULL, degreeFilterGates 
   # Obtain the row indices which correspond to cells which are in each gate in degreeFilterGates
   # indices are based on the root node (i.e. all events). parentGate indices will reflect any sampling performed above.
   degreeFilterGateBooleans <- lapply(gsClone, function(gh) {
-    d <- do.call(cbind, lapply(c(parentGate, degreeFilterGates, otherGates), function(gate) { as.numeric(getIndiceMat(gh, gate)) }))
+    d <- do.call(cbind, lapply(c(parentGate, degreeFilterGates, otherGates), function(gate) { as.integer(getIndiceMat(gh, gate)) }))
     # Add degree column by taking row sums of degreeFilterGates columns. The first column is parentGate, which we don't count as a degree.
     d <- cbind(d, if(length(degreeFilterGates) > 1) {
       rowSums(d[, 2:(1+length(degreeFilterGates))])
