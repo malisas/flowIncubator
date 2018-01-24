@@ -6,13 +6,14 @@
 #' @import magrittr
 #' @import Rtsne
 #' @import Rtsne.multicore
-createTsneInputMatrix <- function(gs=NULL, parentGate = NULL, degreeFilterGates = c(), otherGates = c(), tsneMarkers = c(), swap = FALSE,
+createTsneInputMatrix <- function(gs=NULL, parentGate = NULL, degreeFilterGates = c(), otherGates = c(), tsneMarkers = c(),
                                   groupBy = c(), degreeFilter = 0, seed = 999, theta = 0.9, cloneGs = TRUE) {
   if (is.null(gs)) stop ("required gs is missing ! STOPPING....")
   if (is.null(parentGate)) stop ("required parentGate is missing ! STOPPING....")
   if (length(groupBy) > 2) stop ("groupBy length can be at most 2")
   allMarkerNames <- pData(parameters(getData(gs[[1]])))[,c(1,2)] # First column is flow channel, second is marker name
   if (any(is.na(allMarkerNames[,2])) | length(unique(allMarkerNames[,2])) < length(allMarkerNames[,2])) stop ("all marker names (even FSC-A and Time) must be assigned and be unique")
+  if (length(tsneMarkers) <- 1) stop ("tsneMarkers can't be empty")
   if (any(!(tsneMarkers %in% allMarkerNames[,2]))) stop ("tsneMarkers must all be marker names")
   if (degreeFilter > length(degreeFilterGates)) { stop("degreeFilter must be less than the length of degreeFilterGates")}
   
@@ -194,24 +195,7 @@ createTsneInputMatrix <- function(gs=NULL, parentGate = NULL, degreeFilterGates 
     degreeFilterGateBooleans[[gh_name]] <- d[indicesPassingDegreeFilter,]
     gc() # try cleaning up memory
   }
-  
-  # degreeFilterGateBooleans <- lapply(rownames(gsClone), function(gh_name) {
-  #   d <- do.call(cbind, lapply(c(parentGate, degreeFilterGates, otherGates), function(gate) { as.integer(getIndiceMat(gsClone[[gh_name]], gate)) }))
-  #   # Add degree column by taking row sums of degreeFilterGates columns. The first column is parentGate, which we don't count as a degree.
-  #   d <- cbind(d, if(length(degreeFilterGates) > 1) {
-  #     rowSums(d[, 2:(1+length(degreeFilterGates))])
-  #     } else if(length(degreeFilterGates) == 1){
-  #       d[, 2]
-  #     } else {
-  #       0
-  #     })
-  #   colnames(d) <- c(parentGate, degreeFilterGates, otherGates, "degree")
-  #   totalParentGateEvents <<- totalParentGateEvents + length(which(d[,"degree"] >= 0)) # <<- required to make lapply function modify variable out of usual scope
-  #   indicesPassingDegreeFilter <- which(d[,"degree"] >= degreeFilter)
-  #   degreeFilterIndices[[gh_name]] <<- indicesPassingDegreeFilter # required <<- here as well, I think
-  #   d[indicesPassingDegreeFilter,]
-  # })
-  
+
   cat("obtaining quantitative data \n")
   
   # And then obtain the numerical expression data for each marker
@@ -221,21 +205,27 @@ createTsneInputMatrix <- function(gs=NULL, parentGate = NULL, degreeFilterGates 
     d[degreeFilterIndices[[gh_name]],]
     })
   names(expressionData) <- rownames(pData(gsClone))
+  
+  cat("combining quantitative and boolean data \n")
     
   # Concatenate all the expressionData matrices together into one big tsne-friendly matrix
   # Note that degreeFilterGateBooleans and expressionData rows correspond to the same events
   data_collapse <- ldply(names(expressionData), function(sn) { # each element of expressionData corresponds to a sample
     message(".", appendLF = F)
-    # message(sn)
     mat_mask <- degreeFilterGateBooleans[[sn]]
-    
-    if (nrow(mat_mask) > 0) {
+
+    if ((class(mat_mask) == "matrix" && nrow(mat_mask) > 0) || (class(mat_mask) == "integer")) { #(class(mat_mask) == "matrix" && nrow(mat_mask) > 0) ||  {
       mat <- expressionData[[sn]]
       pd <- pData(gsClone[[sn]])
       rownames(pd) <- NULL
-      mat_combined <- cbind(mat, mat_mask, pd)
-      # # Events which make it past the degreeFilter will have degree >= degreeFilter
-      # mat_combined <- subset(mat_combined, degree >= degreeFilter)
+      mat_combined <- if(class(mat_mask) == "matrix") {
+        cbind(mat, mat_mask, pd)
+      } else if(class(mat_mask) == "integer") {
+        # Assuming an integer class means just one event
+        data.frame(c(mat, mat_mask, pd), check.names = F)
+      } else {
+        stop(sprintf("mat_mask class %s for sample %s not allowed", class(mat_mask), sn))
+      }
       # Return the filtered and combined matrices
       mat_combined
     }
@@ -244,13 +234,17 @@ createTsneInputMatrix <- function(gs=NULL, parentGate = NULL, degreeFilterGates 
   totalDegreeFilteredEvents <- nrow(data_collapse)
   
   cat("\n degreeFilter gates: ", degreeFilterGates)
-  # cat("\n other markers:", as.character(otherMarkers))
   cat("\n", totalParentGateEvents, " rows in ", parentGate, " gate before degreeFilter ...")
   # res_collapse <- subset(res_collapse, degree >= degreeFilter)
   cat("\n input matrix has", totalDegreeFilteredEvents, "rows after filtering for cells of degree >=", 
       degreeFilter)
   input_mat <- data_collapse[, names(data_collapse) %in% tsneMarkers]
   
+  cat("\n")
+  cat(dim(input_mat));cat("\n")
+  cat(dim(data_collapse));cat("\n")
+  cat("\n")
+
   return(list(input_mat = input_mat, data_collapse = data_collapse))
 }
 
@@ -274,7 +268,6 @@ createTsneInputMatrix <- function(gs=NULL, parentGate = NULL, degreeFilterGates 
 #' @param degreeFilterGates a \code{vector} of \code{strings} describing the marker gates immediately downstream of parentGate, eg: "CD4/IL2", "CD4/IFNg". Events are assigned degrees based on how many degreeFilterGates they belong to
 #' @param otherGates a \code{vector} of \code{strings} describing additional gates to obtain boolean data for (gate membership is assigned to each cell)
 #' @param tsneMarkers the markers on which to run tSNE. Although data from all markers will be returned, tSNE is only run on the markers specified in tsneMarkers
-#' @param swap boolean for whether marker and gate names (from markerMap above) should be swapped. Passed onto getSingleCellExpression()
 #' @param groupBy a \code{vector} of \code{strings} describing columns of the \code{gatingSet}'s phenoData. Affects sampling (see function description).
 #' @param degreeFilter keep cells of this degree and higher
 #' @param seed since tSNE is random, need a random seed so we can reproduce results
@@ -291,14 +284,13 @@ createTsneInputMatrix <- function(gs=NULL, parentGate = NULL, degreeFilterGates 
 #' @import magrittr
 #' @import Rtsne
 #' @import Rtsne.multicore
-runTSNE <- function (gs=NULL, parentGate = NULL, degreeFilterGates = c(), otherGates = c(), tsneMarkers = c(), swap = FALSE,
+runTSNE <- function (gs=NULL, parentGate = NULL, degreeFilterGates = c(), otherGates = c(), tsneMarkers = c(),
                      groupBy = c(), degreeFilter = 0, seed = 999, theta = 0.9, numThreads = 1, cloneGs = TRUE, ...) {
   data4tsne <- createTsneInputMatrix(gs = gs,
                                      parentGate = parentGate,
                                      degreeFilterGates = degreeFilterGates,
                                      otherGates = otherGates,
                                      tsneMarkers = tsneMarkers,
-                                     swap = swap,
                                      groupBy = groupBy,
                                      degreeFilter = degreeFilter,
                                      seed = seed,
@@ -307,13 +299,13 @@ runTSNE <- function (gs=NULL, parentGate = NULL, degreeFilterGates = c(), otherG
 
   cat("\n starting tSNE run at ", date(), " with ", numThreads, " threads\n")
   system.time(tsne_out <- if(numThreads > 1) {
-    Rtsne.multicore::Rtsne.multicore(X = data4tsne$input_mat, check_duplicates = FALSE, num_threads = numThreads, 
+    Rtsne.multicore::Rtsne.multicore(X = data4tsne$input_mat, check_duplicates = FALSE, num_threads = numThreads,
                                   ...)
   } else {
-    Rtsne(data4tsne$input_mat, check_duplicates = FALSE, 
+    Rtsne(data4tsne$input_mat, check_duplicates = FALSE,
                     ...)
   })
-  
+
   dat <- tsne_out$Y
   colnames(dat) <- c("x", "y")
   dat <- cbind(dat, data4tsne$data_collapse)
@@ -333,7 +325,7 @@ runTSNE <- function (gs=NULL, parentGate = NULL, degreeFilterGates = c(), otherG
 #' @import plyr
 #' @import magrittr
 #' @import Rtsne
-runOneSense <- function (gs=NULL, parentGate = NULL, degreeFilterGates = c(), otherGates = c(), tsneMarkers = c(), swap = FALSE,
+runOneSense <- function (gs=NULL, parentGate = NULL, degreeFilterGates = c(), otherGates = c(), tsneMarkers = c(),
                      groupBy = c(), degreeFilter = 0, seed = 999, theta = 0.9, cloneGs = TRUE, dimensionMarkers = list(), ...) {
   if(length(dimensionMarkers) > 3) stop("There is a maximum of 3 output dimensions (feel free to modify code if you want more)")
   data4tsne <- createTsneInputMatrix(gs = gs,
@@ -341,7 +333,6 @@ runOneSense <- function (gs=NULL, parentGate = NULL, degreeFilterGates = c(), ot
                                      degreeFilterGates = degreeFilterGates,
                                      otherGates = otherGates,
                                      tsneMarkers = tsneMarkers,
-                                     swap = swap,
                                      groupBy = groupBy,
                                      degreeFilter = degreeFilter,
                                      seed = seed,
