@@ -13,7 +13,7 @@ createTsneInputMatrix <- function(gs=NULL, parentGate = NULL, degreeFilterGates 
   if (length(groupBy) > 2) stop ("groupBy length can be at most 2")
   allMarkerNames <- pData(parameters(getData(gs[[1]])))[,c(1,2)] # First column is flow channel, second is marker name
   if (any(is.na(allMarkerNames[,2])) | length(unique(allMarkerNames[,2])) < length(allMarkerNames[,2])) stop ("all marker names (even FSC-A and Time) must be assigned and be unique")
-  if (length(tsneMarkers) <- 1) stop ("tsneMarkers can't be empty")
+  if (length(tsneMarkers) < 1) stop ("tsneMarkers can't be empty")
   if (any(!(tsneMarkers %in% allMarkerNames[,2]))) stop ("tsneMarkers must all be marker names")
   if (degreeFilter > length(degreeFilterGates)) { stop("degreeFilter must be less than the length of degreeFilterGates")}
   
