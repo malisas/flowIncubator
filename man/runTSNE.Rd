@@ -5,9 +5,8 @@
 \title{Run tSNE from (R pkg 'Rtsne' or 'Rtsne.multicore') on a GatingSet}
 \usage{
 runTSNE(gs = NULL, parentGate = NULL, degreeFilterGates = c(),
-  otherGates = c(), tsneMarkers = c(), swap = FALSE, groupBy = c(),
-  degreeFilter = 0, seed = 999, theta = 0.9, numThreads = 1,
-  cloneGs = TRUE, ...)
+  otherGates = c(), tsneMarkers = c(), groupBy = c(), degreeFilter = 0,
+  seed = 999, theta = 0.9, numThreads = 1, cloneGs = TRUE, ...)
 }
 \arguments{
 \item{gs}{a GatingSet object or path to a GatingSet directory, properly gated data with annotation in its pData}
@@ -19,8 +18,6 @@ runTSNE(gs = NULL, parentGate = NULL, degreeFilterGates = c(),
 \item{otherGates}{a \code{vector} of \code{strings} describing additional gates to obtain boolean data for (gate membership is assigned to each cell)}
 
 \item{tsneMarkers}{the markers on which to run tSNE. Although data from all markers will be returned, tSNE is only run on the markers specified in tsneMarkers}
-
-\item{swap}{boolean for whether marker and gate names (from markerMap above) should be swapped. Passed onto getSingleCellExpression()}
 
 \item{groupBy}{a \code{vector} of \code{strings} describing columns of the \code{gatingSet}'s phenoData. Affects sampling (see function description).}
 
@@ -49,4 +46,6 @@ equal numbers of cells are sampled from the second column (usually the Sample na
 
 - Requires a valid GatingSet with cytokine gates downstream of a parent gate
 - Also expects that pData(gs) contains at least columns: 'name', 'ptid' so we can identify cells later
+
+TODO: allow option to use pre-sampled GatingSet (to save time) and/or save sampled GatingSet to disk...
 }

@@ -1,21 +1,17 @@
-#' @import cytoUtils
+#' Sample a GatingSet
+#' 
+#' @param gs a GatingSet object or path to a GatingSet directory, properly gated data with annotation in its pData
+#' @param parentGate a \code{string} describing the gate upstream of the cytokine gates (eg. "CD4", "cd8+", etc...)
+#' @param groupBy a \code{vector} of \code{strings} describing columns of the \code{gatingSet}'s phenoData.
+#' 
 #' @import flowWorkspace
 #' @import data.table
-#' @import plyr
-#' @import dplyr
-#' @import magrittr
-#' @import Rtsne
-#' @import Rtsne.multicore
-createTsneInputMatrix <- function(gs=NULL, parentGate = NULL, degreeFilterGates = c(), otherGates = c(), tsneMarkers = c(),
-                                  groupBy = c(), degreeFilter = 0, seed = 999, theta = 0.9, cloneGs = TRUE) {
+#' @return a sampled \code{GatingSet}
+#' @export
+sampleGatingSetForTsne <- function(gs=NULL, parentGate = NULL, groupBy = c(), seed = 999, cloneGs = TRUE) {
   if (is.null(gs)) stop ("required gs is missing ! STOPPING....")
   if (is.null(parentGate)) stop ("required parentGate is missing ! STOPPING....")
   if (length(groupBy) > 2) stop ("groupBy length can be at most 2")
-  allMarkerNames <- pData(parameters(getData(gs[[1]])))[,c(1,2)] # First column is flow channel, second is marker name
-  if (any(is.na(allMarkerNames[,2])) | length(unique(allMarkerNames[,2])) < length(allMarkerNames[,2])) stop ("all marker names (even FSC-A and Time) must be assigned and be unique")
-  if (length(tsneMarkers) < 1) stop ("tsneMarkers can't be empty")
-  if (any(!(tsneMarkers %in% allMarkerNames[,2]))) stop ("tsneMarkers must all be marker names")
-  if (degreeFilter > length(degreeFilterGates)) { stop("degreeFilter must be less than the length of degreeFilterGates")}
   
   # The GatingSet gets modified below, so we clone it in order to avoid modifying the original object
   gsClone <- if(class(gs) == "character") {
@@ -25,7 +21,7 @@ createTsneInputMatrix <- function(gs=NULL, parentGate = NULL, degreeFilterGates 
       clone(gs)
     } else {
       gs
-      }
+    }
   } 
   if (!all(groupBy %in% colnames(pData(gsClone)))) stop("all groupBy values must be columns of gs metadata")
   
@@ -45,7 +41,7 @@ createTsneInputMatrix <- function(gs=NULL, parentGate = NULL, degreeFilterGates 
   
   if (length(groupBy) == 1) {
     nTcells <- min(pd[, sum(get(parentGate)), by = groupBy][, 
-                                                          V1])
+                                                            V1])
     cat("after grouping by '", groupBy, "', all groups will have at least", 
         nTcells, "cells.\n")
     
@@ -109,7 +105,7 @@ createTsneInputMatrix <- function(gs=NULL, parentGate = NULL, degreeFilterGates 
         rowsToIncrement <- sample(availableRows, numRowsToSample, replace=F)
         mySD[rowsToIncrement, Group.2.Size := mySD[rowsToIncrement, c("Group.2.Size")] + 1 ]
         # .SD[rowsToIncrement, c("Group.2.Size")] <- .SD[rowsToIncrement, c("Group.2.Size")] + 1
-
+        
         # Prepare variables for the next loop
         remainder <- remainder - numRowsToSample
         availableRows <- which(mySD[,get(parentGate)] > mySD[,c("Group.2.Size")])
@@ -159,6 +155,22 @@ createTsneInputMatrix <- function(gs=NULL, parentGate = NULL, degreeFilterGates 
     # Question: Why doesn't this include the parentGate? parentGate counts seem correct after, but I'm unsure why.
   }
   
+  gsClone
+}
+
+#' @import flowWorkspace
+#' @import data.table
+#' @import plyr
+#' @import dplyr
+extractAndFilterDataForTsne <- function(gs=NULL, parentGate = NULL, degreeFilterGates = c(), otherGates = c(), tsneMarkers = c(), degreeFilter = 0) {
+  if (is.null(gs)) stop ("required gs is missing ! STOPPING....")
+  if (is.null(parentGate)) stop ("required parentGate is missing ! STOPPING....")
+  allMarkerNames <- pData(parameters(getData(gs[[1]])))[,c(1,2)] # First column is flow channel, second is marker name
+  if (any(is.na(allMarkerNames[,2])) | length(unique(allMarkerNames[,2])) < length(allMarkerNames[,2])) stop ("all marker names (even FSC-A and Time) must be assigned and be unique")
+  if (length(tsneMarkers) < 1) stop ("tsneMarkers can't be empty")
+  if (any(!(tsneMarkers %in% allMarkerNames[,2]))) stop ("tsneMarkers must all be marker names")
+  if (degreeFilter > length(degreeFilterGates)) { stop("degreeFilter must be less than the length of degreeFilterGates")}
+  
   ###############
   # Extract data and combine for all samples, filtering based on degree
   ###############
@@ -166,8 +178,8 @@ createTsneInputMatrix <- function(gs=NULL, parentGate = NULL, degreeFilterGates 
   cat("generating event masks \n")
   
   # Make sure degreeFilterGates exist as children of the parent node. This can probably be checked better.
-  childNodeOptions <- c(getChildren(gsClone[[1]], parentGate, path = 2), getChildren(gsClone[[1]], parentGate, path = 1),
-                        getChildren(gsClone[[1]], parentGate, path = "full"), getChildren(gsClone[[1]], parentGate, path = "auto"))
+  childNodeOptions <- c(getChildren(gs[[1]], parentGate, path = 2), getChildren(gs[[1]], parentGate, path = 1),
+                        getChildren(gs[[1]], parentGate, path = "full"), getChildren(gs[[1]], parentGate, path = "auto"))
   for(node in c(degreeFilterGates)) { stopifnot(node %in% childNodeOptions) }
   
   # Obtain the row indices which correspond to cells which are in each gate in degreeFilterGates
@@ -177,8 +189,8 @@ createTsneInputMatrix <- function(gs=NULL, parentGate = NULL, degreeFilterGates 
   totalParentGateEvents <- 0
   degreeFilterIndices <- list() # A list of the cell indices which have degree >= the degreeFilter degree, to be populated in the loop below
   degreeFilterGateBooleans <- list()
-  for(gh_name in rownames(pData(gsClone))) {
-    d <- do.call(cbind, lapply(c(parentGate, degreeFilterGates, otherGates), function(gate) { as.integer(getIndiceMat(gsClone[[gh_name]], gate)) }))
+  for(gh_name in rownames(pData(gs))) {
+    d <- do.call(cbind, lapply(unique(c(parentGate, degreeFilterGates, otherGates)), function(gate) { as.integer(getIndiceMat(gs[[gh_name]], gate)) }))
     # Add degree column by taking row sums of degreeFilterGates columns. The first column is parentGate, which we don't count as a degree.
     d <- cbind(d, if(length(degreeFilterGates) > 1) {
       rowSums(d[, 2:(1+length(degreeFilterGates))])
@@ -195,28 +207,28 @@ createTsneInputMatrix <- function(gs=NULL, parentGate = NULL, degreeFilterGates 
     degreeFilterGateBooleans[[gh_name]] <- d[indicesPassingDegreeFilter,]
     gc() # try cleaning up memory
   }
-
+  
   cat("obtaining quantitative data \n")
   
   # And then obtain the numerical expression data for each marker
-  expressionData <- lapply(rownames(pData(gsClone)), function(gh_name) {
-    d <- exprs(getData(gsClone[[gh_name]]))
+  expressionData <- lapply(rownames(pData(gs)), function(gh_name) {
+    d <- exprs(getData(gs[[gh_name]]))
     colnames(d) <- allMarkerNames[match(colnames(d), allMarkerNames[,1]), 2]
     d[degreeFilterIndices[[gh_name]],]
-    })
-  names(expressionData) <- rownames(pData(gsClone))
+  })
+  names(expressionData) <- rownames(pData(gs))
   
   cat("combining quantitative and boolean data \n")
-    
+  
   # Concatenate all the expressionData matrices together into one big tsne-friendly matrix
   # Note that degreeFilterGateBooleans and expressionData rows correspond to the same events
   data_collapse <- ldply(names(expressionData), function(sn) { # each element of expressionData corresponds to a sample
     message(".", appendLF = F)
     mat_mask <- degreeFilterGateBooleans[[sn]]
-
+    
     if ((class(mat_mask) == "matrix" && nrow(mat_mask) > 0) || (class(mat_mask) == "integer")) { #(class(mat_mask) == "matrix" && nrow(mat_mask) > 0) ||  {
       mat <- expressionData[[sn]]
-      pd <- pData(gsClone[[sn]])
+      pd <- pData(gs[[sn]])
       rownames(pd) <- NULL
       mat_combined <- if(class(mat_mask) == "matrix") {
         cbind(mat, mat_mask, pd)
@@ -240,12 +252,47 @@ createTsneInputMatrix <- function(gs=NULL, parentGate = NULL, degreeFilterGates 
       degreeFilter)
   input_mat <- data_collapse[, names(data_collapse) %in% tsneMarkers]
   
-  cat("\n")
-  cat(dim(input_mat));cat("\n")
-  cat(dim(data_collapse));cat("\n")
-  cat("\n")
+  list(input_mat = input_mat, data_collapse = data_collapse)
+}
 
-  return(list(input_mat = input_mat, data_collapse = data_collapse))
+#' @import cytoUtils
+#' @import flowWorkspace
+#' @import data.table
+#' @import plyr
+#' @import dplyr
+#' @import magrittr
+#' @import Rtsne
+#' @import Rtsne.multicore
+createTsneInputMatrix <- function(gs=NULL, parentGate = NULL, degreeFilterGates = c(), otherGates = c(), tsneMarkers = c(),
+                                  groupBy = c(), degreeFilter = 0, seed = 999, theta = 0.9, cloneGs = TRUE) {
+  if (is.null(gs)) stop ("required gs is missing ! STOPPING....")
+  if (is.null(parentGate)) stop ("required parentGate is missing ! STOPPING....")
+  if (length(groupBy) > 2) stop ("groupBy length can be at most 2")
+  
+  gs <- if(class(gs) == "character") {
+    load_gs(gs)
+  } else {
+    gs
+  }
+  # Note this only modifies gs in the scope of this function and any that are called by it
+  
+  allMarkerNames <- pData(parameters(getData(gs[[1]])))[,c(1,2)] # First column is flow channel, second is marker name
+  if (any(is.na(allMarkerNames[,2])) | length(unique(allMarkerNames[,2])) < length(allMarkerNames[,2])) stop ("all marker names (even FSC-A and Time) must be assigned and be unique")
+  if (length(tsneMarkers) < 1) stop ("tsneMarkers can't be empty")
+  if (any(!(tsneMarkers %in% allMarkerNames[,2]))) stop ("tsneMarkers must all be marker names")
+  if (degreeFilter > length(degreeFilterGates)) { stop("degreeFilter must be less than the length of degreeFilterGates")}
+  
+  gsClone <- if(length(groupBy)) {
+    sampleGatingSetForTsne(gs=gs, parentGate = parentGate, groupBy = groupBy, seed = seed, cloneGs = cloneGs) 
+    # seed gets set inside sampleGatingSetForTsne()
+  } else {
+    set.seed(seed)
+    gs
+  }
+
+  # Return a list containing the tSNE input matrix and the full collapsed data
+  return(extractAndFilterDataForTsne(gs=gsClone, parentGate = parentGate, degreeFilterGates = degreeFilterGates,
+                                     otherGates = otherGates, tsneMarkers = tsneMarkers, degreeFilter = degreeFilter))
 }
 
 # Using this method the user should just need to supply parentGate, degreeFilterNodes, degreeFilter, tsneMarkers (And just return all the markers)
@@ -262,6 +309,7 @@ createTsneInputMatrix <- function(gs=NULL, parentGate = NULL, degreeFilterGates 
 #' - Requires a valid GatingSet with cytokine gates downstream of a parent gate
 #' - Also expects that pData(gs) contains at least columns: 'name', 'ptid' so we can identify cells later
 #' 
+#' TODO: allow option to use pre-sampled GatingSet (to save time) and/or save sampled GatingSet to disk...
 #' 
 #' @param gs a GatingSet object or path to a GatingSet directory, properly gated data with annotation in its pData
 #' @param parentGate a \code{string} describing the gate upstream of the cytokine gates (eg. "CD4", "cd8+", etc...)
