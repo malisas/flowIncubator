@@ -200,9 +200,11 @@ extractAndFilterDataForTsne <- function(gs=NULL, parentGate = NULL, degreeFilter
       0
     })
     colnames(d) <- c(parentGate, degreeFilterGates, otherGates, "degree")
-    # Members of the parentGate will have degree 0 or higher (just for tracking purposes)
-    totalParentGateEvents <- totalParentGateEvents + length(which(d[,"degree"] >= 0))
-    indicesPassingDegreeFilter <- which(d[,"degree"] >= degreeFilter)
+    # Members of the parentGate will have parentGate be 1 (just for tracking purposes)
+    # totalParentGateEvents <- totalParentGateEvents + length(which(d[,"degree"] >= 0))
+    totalParentGateEvents <- totalParentGateEvents + length(which(d[,parentGate] == 1))
+    # indicesPassingDegreeFilter <- which(d[,"degree"] >= degreeFilter)
+    indicesPassingDegreeFilter <- which(d[,"degree"] >= degreeFilter & d[,parentGate] == 1)
     degreeFilterIndices[[gh_name]] <- indicesPassingDegreeFilter
     degreeFilterGateBooleans[[gh_name]] <- d[indicesPassingDegreeFilter,]
     gc() # try cleaning up memory
