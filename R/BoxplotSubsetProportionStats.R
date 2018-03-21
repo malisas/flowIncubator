@@ -13,6 +13,7 @@
 #' @param overrideGate If this is set to TRUE, booleanSubset will override any previous node of the same name under the same parentGate.
 #' @param ylimits optional numeric vector
 #' @param sampleIDCol (optional) Name of the GatingSet metadata column which contains individual sample identifiers. If sampleIDCol is provided, outliers will be labeled with this value.
+#' @param jitterWidth 
 #' @return boxplot and stats, and optionally saves the plot to outdir
 #' @import coin
 #' @import data.table
@@ -41,7 +42,8 @@ boxplot.subset.proportion.stats <- function(gsOrGsListOrPath,
                                             overrideGate=FALSE,
                                             ylimits=NULL,
                                             baseSize=19,
-                                            sampleIDCol=NULL
+                                            sampleIDCol=NULL,
+                                            jitterWidth=0.15
 ) {
   try(if(missing(gsOrGsListOrPath) || (is.null(booleanSubset) && is.null(existingSubset)) || missing(parentGate)) stop("Required arguments missing.") )
   
@@ -124,7 +126,7 @@ boxplot.subset.proportion.stats <- function(gsOrGsListOrPath,
     plottitle <- paste0("Boxplot of Proportion of\n", subsetNameForPlot, " Cells\nof total ", parentGateForProportionCalc, " Cells")
     p <- ggplot2::ggplot(mergedPopStats, ggplot2::aes(x=factor(0), y = Proportion)) +
       ggplot2::geom_boxplot(outlier.shape = NA) +
-      ggplot2::geom_jitter() +
+      ggplot2::geom_jitter(width=jitterWidth) +
       ggplot2::theme_set(ggplot2::theme_gray(base_size = baseSize)) +
       ggplot2::theme(plot.title=ggplot2::element_text(vjust=-0.8, hjust=0.5)) +
       ggplot2::labs(x="All Samples", y=paste0("Proportion of ", parentGateForProportionCalc, " Cells"),
@@ -147,7 +149,7 @@ boxplot.subset.proportion.stats <- function(gsOrGsListOrPath,
     subtitle <- paste0("Stratified by ", groupBy, "\np = ", signif(coin::pvalue(test), 4), ",  Z = ", signif(coin::statistic(test), 4))
     p <- ggplot2::ggplot(mergedPopStats, ggplot2::aes_string(x = "GroupTmp", y = "Proportion")) +
       ggplot2::geom_boxplot(outlier.shape = NA) +
-      ggplot2::geom_jitter() +
+      ggplot2::geom_jitter(width=jitterWidth) +
       ggplot2::theme_set(ggplot2::theme_gray(base_size = baseSize)) +
       ggplot2::theme(plot.title=ggplot2::element_text(vjust=-0.8, hjust=0.5)) +
       ggplot2::labs(x=groupBy, y=paste0("Proportion of ", parentGateForProportionCalc, " Cells"),

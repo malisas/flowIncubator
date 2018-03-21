@@ -8,7 +8,7 @@
   existingSubset = NULL, booleanSubset = NULL, parentGate,
   parentGateForProportionCalc = parentGate, groupBy = NULL, outdir = NULL,
   overrideGate = FALSE, ylimits = NULL, baseSize = 19,
-  sampleIDCol = NULL)
+  sampleIDCol = NULL, jitterWidth = 0.15)
 }
 \arguments{
 \item{gsOrGsListOrPath}{Either a GatingSet, a GatingSetList, or path to one of these objects on disk}
@@ -30,6 +30,8 @@
 \item{ylimits}{optional numeric vector}
 
 \item{sampleIDCol}{(optional) Name of the GatingSet metadata column which contains individual sample identifiers. If sampleIDCol is provided, outliers will be labeled with this value.}
+
+\item{jitterWidth}{}
 }
 \value{
 boxplot and stats, and optionally saves the plot to outdir
